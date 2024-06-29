@@ -1,0 +1,211 @@
+To complete this developer assessment task, you need to create two GitHub repositories and implement a system that uses GitHub webhooks to capture events and display them on a UI. Below is a detailed guide on how to approach this task:
+
+Step 1: Setting Up Repositories
+Create Repositories:
+action-repo: This repository will be used to trigger GitHub actions (Push, Pull Request, Merge).
+webhook-repo: This repository will handle the webhook endpoint to capture events and store them in MongoDB.
+Step 2: Setting Up GitHub Webhooks
+Configure Webhook for action-repo:
+Go to the Settings of action-repo.
+Select Webhooks and click on Add webhook.
+Set the Payload URL to your endpoint (which will be created in webhook-repo).
+Set Content type to application/json.
+Choose Let me select individual events and select Push, Pull Request, and Merge.
+Step 3: Implementing the Webhook Endpoint
+Clone webhook-repo and Set Up Flask:
+
+Clone the webhook-repo.
+Set up a Flask application in this repository.
+Implement the Webhook Endpoint:
+
+python
+Copy code
+from flask import Flask, request, jsonify
+from pymongo import MongoClient
+import datetime
+
+app = Flask(__name__)
+client = MongoClient('mongodb://localhost:27017/')
+db = client['github_events']
+events_collection = db['events']
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    event = request.headers.get('X-GitHub-Event')
+    payload = request.json
+
+    if event == 'push':
+        event_data = {
+            'type': 'push',
+            'author': payload['pusher']['name'],
+            'to_branch': payload['ref'].split('/')[-1],
+            'timestamp': datetime.datetime.utcnow()
+        }
+    elif event == 'pull_request':
+        action = payload['action']
+        if action in ['opened', 'closed']:
+            event_data = {
+                'type': 'pull_request',
+                'author': payload['pull_request']['user']['login'],
+                'from_branch': payload['pull_request']['head']['ref'],
+                'to_branch': payload['pull_request']['base']['ref'],
+                'timestamp': datetime.datetime.utcnow()
+            }
+    elif event == 'pull_request_review' and payload['action'] == 'submitted':
+        event_data = {
+            'type': 'merge',
+            'author': payload['review']['user']['login'],
+            'from_branch': payload['pull_request']['head']['ref'],
+            'to_branch': payload['pull_request']['base']['ref'],
+            'timestamp': datetime.datetime.utcnow()
+        }
+    else:
+        return jsonify({'status': 'ignored'})
+
+    events_collection.insert_one(event_data)
+    return jsonify({'status': 'success'})
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
+Step 4: Setting Up MongoDB
+Run MongoDB:
+Ensure MongoDB is running locally or on a server.
+Create a database named github_events and a collection named events.
+Step 5: Implementing the UI
+Create a Simple Frontend:
+
+Use HTML/CSS and JavaScript (e.g., with the Fetch API) to create a minimal UI.
+The UI should poll the MongoDB endpoint every 15 seconds to fetch and display the latest events.
+html
+Copy code
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Events</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .event { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>GitHub Events</h1>
+    <div id="events"></div>
+
+    <script>
+        async function fetchEvents() {
+            const response = await fetch('/events');
+            const events = await response.json();
+            const eventsContainer = document.getElementById('events');
+            eventsContainer.innerHTML = '';
+
+            events.forEach(event => {
+                const eventDiv = document.createElement('div');
+                eventDiv.className = 'event';
+                let eventText = '';
+
+                if (event.type === 'push') {
+                    eventText = `${event.author} pushed to ${event.to_branch} on ${new Date(event.timestamp).toLocaleString()}`;
+                } else if (event.type === 'pull_request') {
+                    eventText = `${event.author} submitted a pull request from ${event.from_branch} to ${event.to_branch} on ${new Date(event.timestamp).toLocaleString()}`;
+                } else if (event.type === 'merge') {
+                    eventText = `${event.author} merged branch ${event.from_branch} to ${event.to_branch} on ${new Date(event.timestamp).toLocaleString()}`;
+                }
+
+                eventDiv.textContent = eventText;
+                eventsContainer.appendChild(eventDiv);
+            });
+        }
+
+        setInterval(fetchEvents, 15000);
+        fetchEvents();
+    </script>
+</body>
+</html>
+Create an Endpoint to Serve Events Data:
+
+python
+Copy code
+@app.route('/events', methods=['GET'])
+def get_events():
+    events = events_collection.find().sort('timestamp', -1).limit(10)
+    return jsonify(list(events))
+Step 6: Testing and Submission
+Test the System:
+
+Perform Push, Pull Request, and Merge actions in action-repo to ensure the webhook captures events and stores them in MongoDB.
+Ensure the UI reflects the latest events accurately.
+Submit the Repositories:
+
+Provide the links to both repositories (action-repo and webhook-repo) in the provided Google Form.
+This approach ensures you meet all the requirements of the developer assessment task by creating a functioning system that captures GitHub events, stores them in MongoDB, and displays them on a UI.
+
+Payload URL *
+ISHERE121
+is missing a scheme suggest some good payload url
+ChatGPT
+To set up the payload URL for the webhook, you'll need to provide a valid URL where your Flask application is hosted. If you're running the Flask application locally for testing, you can use a tool like ngrok to create a publicly accessible URL that tunnels to your local server.
+
+Here's a step-by-step guide on setting up ngrok and obtaining a payload URL:
+
+Step 1: Install ngrok
+Download ngrok: Go to the ngrok download page and download the appropriate version for your operating system.
+Install ngrok: Follow the installation instructions for your OS.
+Step 2: Run Your Flask Application
+Make sure your Flask application (which handles the webhook) is running on your local machine. By default, Flask runs on port 5000.
+
+sh
+Copy code
+export FLASK_APP=webhook.py
+flask run
+Step 3: Start ngrok
+Open a new terminal window and start ngrok to tunnel HTTP traffic to your local Flask server.
+
+sh
+Copy code
+ngrok http 5000
+ngrok will provide a URL that forwards requests to your local server. It will look something like this:
+
+bash
+Copy code
+Forwarding                    http://abcd1234.ngrok.io -> http://localhost:5000
+Step 4: Use the ngrok URL as the Payload URL
+In your GitHub repository (action-repo), set the payload URL in the webhook settings to the URL provided by ngrok. For example:
+
+bash
+Copy code
+http://abcd1234.ngrok.io/webhook
+Example GitHub Webhook Configuration
+Go to action-repo settings:
+
+Navigate to Settings -> Webhooks -> Add webhook.
+Configure the Webhook:
+
+Payload URL: http://abcd1234.ngrok.io/webhook
+Content type: application/json
+Select individual events: Push, Pull Request, and Merge
+By following these steps, you'll have a working payload URL that GitHub can use to send webhook events to your locally running Flask application.
+
+Optional: Deploy Flask Application Online
+For a production setup, you may want to deploy your Flask application to a cloud service like Heroku, AWS, or any other platform that provides a public URL. This will eliminate the need for ngrok and ensure your webhook endpoint is always accessible. Here are some steps to deploy on Heroku:
+
+Install the Heroku CLI and log in:
+sh
+Copy code
+heroku login
+Create a new Heroku app:
+sh
+Copy code
+heroku create
+Deploy your Flask app:
+sh
+Copy code
+git add .
+git commit -m "Deploy Flask app"
+git push heroku master
+Get the Heroku app URL and use it as the payload URL:
+arduino
+Copy code
+https://your-heroku-app.herokuapp.com/webhook
+Using a publicly accessible service ensures reliability and accessibility for your webhook endpoint.
